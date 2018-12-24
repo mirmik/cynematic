@@ -6,29 +6,80 @@
 #include <vector>
 
 #include <cynematic/link.h>
+#include <cynematic/linalg-addon.h>
 
 using namespace linalg;
 using namespace linalg::aliases;
 using namespace linalg::ostream_overloads;
+
+using namespace cynematic;
 
 float deg(float angle)
 {
 	return angle * M_PI / 180.0;
 }
 
+std::vector<float> backpack(float3 need, std::vector<float3> sens) 
+{
+	float3 last_res;
+	auto res = vec<float, 3>{0,0,0};
+	auto koeffs = std::vector<float>();
+	koeffs.resize(sens.size());
+
+	do 
+		for (int i = 0; i < sens.size(); ++i) 
+		{
+			last_res = res;
+
+			koeffs[i] += linalg::dot(need - res, sens[i]) / length2(sens[i]);
+
+			res = vec<float, 3>{0,0,0};
+			for(int j = 0; j < sens.size(); ++j) 
+			{
+				res += sens[j] * koeffs[j];
+			}
+		}
+	while (length(res - last_res) > 0.000001);
+
+	return koeffs;
+}
+
 int main ()
 {
-	linalg::mtrans<float> trans1(rotation_quat<float>(float3(0,0,1), deg(90)), float3(0,0,0));
-	linalg::mtrans<float> trans2(rotation_quat<float>(float3(0,0,1), deg(0)), float3(0,10,0));
+	cynematic::rotation_link<float> r0(float3(0,0,1));
+	cynematic::constant_link<float> c0(mtrans<float>::translation(float3(0,0,5)));
+	cynematic::translation_link<float> t0(float3(1,0,0));
+	cynematic::translation_link<float> t1(float3(0,0,1));
 
-	linalg::bivec<float, 3> bv(float3(0,1,0), float3(0,1,0));
+	cynematic::chain<float> chain { &c0, &r0, &t0, &t1 };
 
-	nos::println(((trans2 * trans1)(bv)).concat());
-	nos::println(trans2(trans1(bv)).concat());
+	auto res = chain.get_speed_transes({deg(45),10,10});
+	std::vector<float3> sens;
 
-	nos::println(((trans1 * trans2)(bv)).concat());
-	nos::println(trans1(trans2(bv)).concat());
+	for (auto& r : res) {
+		sens.push_back(r.b);
+		nos::println(r.concat());
+	}
 
+	float3 target {0,10,20};
+	float3 current = chain.get({0,10,10}).mov;
+
+	PRINT(target);
+	PRINT(current);
+
+	auto need_to_target = target - current;
+	PRINT(need_to_target);
+
+	auto backp = backpack(normalize(need_to_target), sens);
+
+	float3 accum {0,0,0};
+	for (int i = 0; i < backp.size(); ++i) {
+		accum += sens[i] * backp[i];
+		PRINT(sens[i]);
+		PRINT(backp[i]);
+	}
+
+	nos::println(accum);
 
 	/*vec<float,6> target {0,0,1,0,28,2};
 	auto unit_target = linalg::normalize(target);

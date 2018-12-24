@@ -3,10 +3,12 @@
 
 #include <linalg.h>
 #include <linalg-ext.h>
+#include <cynematic/linalg-addon.h>
 
 #include <nos/trace.h>
 
 #include <initializer_list>
+#include <algorithm>
 
 namespace cynematic
 {
@@ -17,50 +19,40 @@ namespace cynematic
 	template <typename T>
 	struct abstract_link
 	{
-		using mat_t = linalg::mat<T, 4, 4>;
 		using ax_t = linalg::vec<T, 3>;
 
-		virtual mat_t get(const std::vector<T>& coords,
+		virtual mtrans<T> get(const std::vector<T>& coords,
 		                  uint8_t pos) = 0;
-	
-		virtual mat_t sensmat() = 0;
-	
+
 		virtual uint8_t count_of_coords() = 0;
 	};
 
 	template <typename T> 
 	struct onedof_link : public abstract_link<T>
 	{
-		using mat_t = typename abstract_link<T>::mat_t;
+		virtual mtrans<T> get(T coord) = 0;
 
-		virtual mat_t get(T coord) = 0;
-
-		mat_t get(const std::vector<T>& coords, uint8_t pos) override
+		mtrans<T> get(const std::vector<T>& coords, uint8_t pos) override
 		{
 			return get(coords[pos]);
 		}
+
+		virtual bivec<T,3> d1_bivec() = 0;
 	};
 
 	template <typename T>
 	struct constant_link : public abstract_link<T>
 	{
-		using mat_t = typename abstract_link<T>::mat_t;
+		mtrans<T> mat;
 
-		mat_t mat;
-
-		mat_t get()
+		mtrans<T> get()
 		{
 			return mat;
 		}
 
-		mat_t get(const std::vector<T>& coords, uint8_t pos) override
+		mtrans<T> get(const std::vector<T>& coords, uint8_t pos) override
 		{
 			return mat;
-		}
-
-		mat_t sensmat()
-		{
-			return mat_t();
 		}
 
 		uint8_t count_of_coords() override
@@ -68,92 +60,67 @@ namespace cynematic
 			return 0;
 		}
 
-		constant_link(mat_t _mat) : mat(_mat) {};
+		constant_link(mtrans<T> _mat) : mat(_mat) {};
 	};
 
-	/*template<typename T, typename F>
-	struct one_dof_link_t : public abstract_link<T>
-	{
-		F func;
-
-		mat_t get(const std::vector<double>& coords, uint8_t pos) override
-		{
-			return func(coords[pos]);
-		}
-
-		mat_t sensmat()
-		{
-			return mat_t();
-		}
-
-		uint8_t count_of_coords() override
-		{
-			return 1;
-		}
-
-		one_dof_link_t(F _func) : func(_func) {};
-	};
-
-	template <typename F>
-	one_dof_link_t<F> one_dof_link(F func) { return one_dof_link_t<F>(func); }
-*/
 	template<typename T>
 	struct rotation_link : public onedof_link<T>
 	{
-		using mat_t = linalg::mat<T,4,4>;
 		using ax_t = linalg::vec<T,3>;
 		ax_t axvec;
 
 		rotation_link(ax_t _axvec) : axvec(_axvec) {}
 
-		mat_t get(T coord) override
+		mtrans<T> get(T coord) override
 		{
-			return homogeneous_transformation<T, 3>::rotation( rotation_quat(axvec, coord) );
-		}
-
-		mat_t  sensmat()   //return homogeneous_transformation<double, 3>::rotation( rotation_quat(axvec, ) );
-		{
-			NOT_IMPLEMENTED();
+			return mtrans<T>::rotation(axvec, coord);
 		}
 
 		uint8_t count_of_coords() override
 		{
 			return 1;
 		}
+
+		bivec<T,3> d1_bivec() override
+		{
+			return { axvec, ax_t() };
+		}
 	};
-/*
-	struct parametric_translation_link : public abstract_link
+
+	template<typename T>
+	struct translation_link : public onedof_link<T>
 	{
+		using ax_t = linalg::vec<T,3>;
 		ax_t axvec;
 
-		parametric_translation_link(double3 _axvec) : axvec(_axvec) {}
+		translation_link(ax_t _axvec) : axvec(_axvec) {}
 
-		mat_t get(const std::vector<double>& coords, uint8_t pos) override
+		mtrans<T> get(T coord) override
 		{
-			return homogeneous_transformation<double, 3>::translation( axvec * coords[pos] );
-		}
-
-		mat_t sensmat()
-		{
-			return homogeneous_transformation<double, 3>::translation( axvec ) - mat_t(identity);
+			return mtrans<T>::translation(axvec * coord);
 		}
 
 		uint8_t count_of_coords() override { return 1; }
+
+		bivec<T,3> d1_bivec() override
+		{
+			return { ax_t(), axvec };
+		}
 	};
-*/
+
 	template <typename T>
 	struct chain
 	{
-		using mat_t = linalg::mat<T,4,4>;
-
 		chain(){}
-		chain(std::initializer_list<abstract_link<T>*> lst) : links(lst) {}
+		chain(std::initializer_list<abstract_link<T>*> lst) : links(lst) {
+			for(auto* r : links) { coords_total += r->count_of_coords(); }
+		}
 
-		void add_link(abstract_link<T>* lnk) { links.push_back(lnk); }
+		void add_link(abstract_link<T>* lnk) { links.push_back(lnk); coords_total += lnk->count_of_coords(); }
 
-		mat_t get(const std::vector<T>& coords)
+		mtrans<T> get(const std::vector<T>& coords)
 		{
-			mat_t result = identity;
+			mtrans<T> result {};
 			int8_t coord_pos = coords.size() - 1;
 
 			for (int i = links.size() - 1; i >= 0; --i)
@@ -161,9 +128,9 @@ namespace cynematic
 				uint8_t count_of_coords = links[i]->count_of_coords();
 
 				if (coord_pos - count_of_coords + 1 < 0)
-					return mat_t();
+					return mtrans<T>();
 
-				mat_t nmat = links[i]->get(coords, coord_pos);
+				mtrans<T> nmat = links[i]->get(coords, coord_pos);
 				result = nmat * result;
 				coord_pos -= count_of_coords;
 			}
@@ -171,11 +138,49 @@ namespace cynematic
 			return result;
 		}
 
-		/*std::vector<mat_t> sensivity_matrices(const std::vector<double>& coords)
+		std::vector<bivec<T,3>> get_speed_transes(const std::vector<T>& coords)
+		{
+			std::vector<bivec<T,3>> result;
+
+			mtrans<T> curtrans {};
+			int8_t coord_pos = coords.size() - 1;
+
+			for (int i = links.size() - 1; i >= 0; --i)
+			{
+				uint8_t count_of_coords = links[i]->count_of_coords();
+
+				//Проверка корректности вектора координат.
+				if (coord_pos - count_of_coords + 1 < 0)
+					return std::vector<bivec<T,3>>();
+
+				if (count_of_coords > 0)
+				{
+					if (count_of_coords == 1)
+					{
+						result.emplace_back(speed_trans(((onedof_link<T>*)links[i])->d1_bivec(), curtrans));
+					}
+					else
+					{
+						NOT_IMPLEMENTED();
+					}
+				}
+
+				//перематываем на следующий линк.
+				mtrans<T> nmat = links[i]->get(coords, coord_pos);
+				curtrans = nmat * curtrans;
+
+				coord_pos -= count_of_coords;
+			}
+
+			std::reverse(result.begin(),result.end());
+			return result;
+		}
+
+		/*std::vector<mtrans<T>> sensivity_matrices(const std::vector<double>& coords)
 		{
 			TRACE();
-			std::vector<mat_t> result;
-			mat_t curtrans = identity;
+			std::vector<mtrans<T>> result;
+			mtrans<T> curtrans = identity;
 			int8_t coord_pos = coords.size() - 1;
 
 			for (int i = links.size() - 1; i >= 0; --i)
@@ -183,7 +188,7 @@ namespace cynematic
 				uint8_t count_of_coords = links[i]->count_of_coords();
 
 				if (coord_pos - count_of_coords + 1 < 0)
-					return std::vector<mat_t>();
+					return std::vector<mtrans<T>>();
 
 				if (count_of_coords > 0)
 				{
@@ -194,11 +199,11 @@ namespace cynematic
 					}
 					else
 					{
-						return std::vector<mat_t>();
+						return std::vector<mtrans<T>>();
 					}
 				}
 
-				mat_t nmat = links[i]->get(coords, coord_pos);
+				mtrans<T> nmat = links[i]->get(coords, coord_pos);
 				curtrans = nmat * curtrans;
 
 				coord_pos -= count_of_coords;
@@ -208,7 +213,7 @@ namespace cynematic
 
 		}
 
-		std::vector<double> sensivity(std::vector<double> curcoords, mat_t target)
+		std::vector<double> sensivity(std::vector<double> curcoords, mtrans<T> target)
 		{
 			auto curmat = get(curcoords);
 			auto needmat = target * inverse(curmat);
@@ -223,6 +228,7 @@ namespace cynematic
 		}*/
 	private:
 		std::vector<abstract_link<T> *> links;
+		size_t coords_total = 0;
 	};
 /*
 	struct dynamic_chain : public chain
