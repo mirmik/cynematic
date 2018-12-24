@@ -54,7 +54,8 @@ namespace cynematic
 
 		vec<T, 6> vector6()
 		{
-			auto rotvec = qaxis(rot) * qangle(rot);
+			auto angle = qangle(rot);
+			auto rotvec = angle == 0 ? vec<float,3>{0,0,0} : qaxis(rot) * angle;
 			return { rotvec[0], rotvec[1], rotvec[2], mov[0], mov[1], mov[2] };
 		}
 

@@ -19,21 +19,29 @@ float deg(float angle)
 	return angle * M_PI / 180.0;
 }
 
-std::vector<float> backpack(float3 need, std::vector<float3> sens) 
+template<typename T, int M>
+std::vector<T> backpack(vec<T,M> need, std::vector<vec<T,M>> sens) 
 {
-	float3 last_res;
-	auto res = vec<float, 3>{0,0,0};
-	auto koeffs = std::vector<float>();
+	vec<T,M> last_res;
+	auto res = vec<T,M>{0,0,0};
+	auto koeffs = std::vector<T>();
 	koeffs.resize(sens.size());
 
+	nos::println();
 	do 
 		for (int i = 0; i < sens.size(); ++i) 
 		{
 			last_res = res;
+			PRINT(need);
+			PRINT(res);
+			PRINT(need - res);
+			PRINT(sens[i]);
+
+			PRINT(linalg::dot(need - res, sens[i]));
 
 			koeffs[i] += linalg::dot(need - res, sens[i]) / length2(sens[i]);
 
-			res = vec<float, 3>{0,0,0};
+			res = vec<T,M>{0,0,0};
 			for(int j = 0; j < sens.size(); ++j) 
 			{
 				res += sens[j] * koeffs[j];
@@ -55,31 +63,40 @@ int main ()
 
 	auto res = chain.get_speed_transes({deg(45),10,10});
 	std::vector<float3> sens;
+	std::vector<vec<float,6>> sens6;
 
 	for (auto& r : res) {
 		sens.push_back(r.b);
-		nos::println(r.concat());
+		sens6.push_back(r.concat());
 	}
 
 	float3 target {0,10,20};
-	float3 current = chain.get({0,10,10}).mov;
+	mtrans<float> target6 ({0,0,0,1},{0,0,0});
 
-	PRINT(target);
-	PRINT(current);
+	float3 current = chain.get({0,10,10}).mov;
+	mtrans<float> current6 = chain.get({0,10,10});
 
 	auto need_to_target = target - current;
-	PRINT(need_to_target);
+	auto need_to_target6 = target6 * current6.inverse();
 
 	auto backp = backpack(normalize(need_to_target), sens);
+	auto backp6 = backpack(normalize(need_to_target6.vector6()), sens6);
 
-	float3 accum {0,0,0};
+	PRINT(need_to_target);
+	vec<float,3> accum;
 	for (int i = 0; i < backp.size(); ++i) {
 		accum += sens[i] * backp[i];
 		PRINT(sens[i]);
 		PRINT(backp[i]);
 	}
 
-	nos::println(accum);
+	PRINT(need_to_target6.vector6());
+	vec<float,6> accum6;
+	for (int i = 0; i < backp6.size(); ++i) {
+		accum6 += sens6[i] * backp6[i];
+		PRINT(sens6[i]);
+		PRINT(backp6[i]);
+	}
 
 	/*vec<float,6> target {0,0,1,0,28,2};
 	auto unit_target = linalg::normalize(target);
