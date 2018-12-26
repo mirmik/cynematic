@@ -11,11 +11,50 @@
 #include <initializer_list>
 #include <algorithm>
 
+#include <gxx/util/iteration_counter.h>
+
+#include <thread>
+#include <chrono>
+
+#include <numeric>
+
 namespace cynematic
 {
 	using namespace linalg;
 	using namespace linalg::aliases;
 	using namespace linalg::ostream_overloads;
+
+
+
+	template<typename T, int M>
+	std::vector<T> backpack(vec<T, M> need, std::vector<vec<T, M>> sens)
+	{
+		vec<T, M> last_res;
+		auto res = vec<T, M> {0, 0, 0};
+		auto koeffs = std::vector<T>();
+		koeffs.resize(sens.size());
+
+		//nos::println();
+
+		do
+			for (int i = 0; i < sens.size(); ++i)
+			{
+				last_res = res;
+
+				koeffs[i] += linalg::dot(need - res, sens[i]) / length2(sens[i]);
+
+				res = vec<T, M> {0, 0, 0};
+
+				for (int j = 0; j < sens.size(); ++j)
+				{
+					res += sens[j] * koeffs[j];
+				}
+			}
+
+		while (length(res - last_res) > 0.000001);
+
+		return koeffs;
+	}
 
 	template <typename T>
 	struct abstract_link
@@ -23,12 +62,12 @@ namespace cynematic
 		using ax_t = linalg::vec<T, 3>;
 
 		virtual mtrans<T> get(const std::vector<T>& coords,
-		                  uint8_t pos) = 0;
+		                      uint8_t pos) = 0;
 
 		virtual uint8_t count_of_coords() = 0;
 	};
 
-	template <typename T> 
+	template <typename T>
 	struct onedof_link : public abstract_link<T>
 	{
 		virtual mtrans<T> get(T coord) = 0;
@@ -38,7 +77,7 @@ namespace cynematic
 			return get(coords[pos]);
 		}
 
-		virtual bivec<T,3> d1_bivec() = 0;
+		virtual bivec<T, 3> d1_bivec() = 0;
 	};
 
 	template <typename T>
@@ -67,7 +106,7 @@ namespace cynematic
 	template<typename T>
 	struct rotation_link : public onedof_link<T>
 	{
-		using ax_t = linalg::vec<T,3>;
+		using ax_t = linalg::vec<T, 3>;
 		ax_t axvec;
 
 		rotation_link(ax_t _axvec) : axvec(_axvec) {}
@@ -82,7 +121,7 @@ namespace cynematic
 			return 1;
 		}
 
-		bivec<T,3> d1_bivec() override
+		bivec<T, 3> d1_bivec() override
 		{
 			return { axvec, ax_t() };
 		}
@@ -91,7 +130,7 @@ namespace cynematic
 	template<typename T>
 	struct translation_link : public onedof_link<T>
 	{
-		using ax_t = linalg::vec<T,3>;
+		using ax_t = linalg::vec<T, 3>;
 		ax_t axvec;
 
 		translation_link(ax_t _axvec) : axvec(_axvec) {}
@@ -103,7 +142,7 @@ namespace cynematic
 
 		uint8_t count_of_coords() override { return 1; }
 
-		bivec<T,3> d1_bivec() override
+		bivec<T, 3> d1_bivec() override
 		{
 			return { ax_t(), axvec };
 		}
@@ -112,9 +151,10 @@ namespace cynematic
 	template <typename T>
 	struct chain
 	{
-		chain(){}
-		chain(std::initializer_list<abstract_link<T>*> lst) : links(lst) {
-			for(auto* r : links) { coords_total += r->count_of_coords(); }
+		chain() {}
+		chain(std::initializer_list<abstract_link<T>*> lst) : links(lst)
+		{
+			for (auto* r : links) { coords_total += r->count_of_coords(); }
 		}
 
 		void add_link(abstract_link<T>* lnk) { links.push_back(lnk); coords_total += lnk->count_of_coords(); }
@@ -139,9 +179,9 @@ namespace cynematic
 			return result;
 		}
 
-		std::vector<bivec<T,3>> get_speed_transes(const std::vector<T>& coords)
+		std::vector<vec<T,6>> get_speed_transes(const std::vector<T>& coords)
 		{
-			std::vector<bivec<T,3>> result;
+			std::vector<vec<T,6>> result;
 
 			mtrans<T> curtrans {};
 			int8_t coord_pos = coords.size() - 1;
@@ -152,13 +192,13 @@ namespace cynematic
 
 				//Проверка корректности вектора координат.
 				if (coord_pos - count_of_coords + 1 < 0)
-					return std::vector<bivec<T,3>>();
+					return std::vector<vec<T,6>>();
 
 				if (count_of_coords > 0)
 				{
 					if (count_of_coords == 1)
 					{
-						result.emplace_back(speed_trans(((onedof_link<T>*)links[i])->d1_bivec(), curtrans));
+						result.emplace_back(speed_trans(((onedof_link<T>*)links[i])->d1_bivec(), curtrans).concat());
 					}
 					else
 					{
@@ -173,20 +213,21 @@ namespace cynematic
 				coord_pos -= count_of_coords;
 			}
 
-			std::reverse(result.begin(),result.end());
+			std::reverse(result.begin(), result.end());
 			return result;
 		}
 
-		bivec<T,3> get_sens(int idx, const std::vector<T>& coords) 
+		bivec<T, 3> get_sens(int idx, const std::vector<T>& coords)
 		{
 			uint8_t coordpos = coords_total - 1;
 			mtrans<T> curtrans {};
 
 			int linkidx = links.size() - 1;
-			while (coordpos != idx) 
+
+			while (coordpos != idx)
 			{
 				uint8_t count_of_coords = links[linkidx]->count_of_coords();
-				auto nmat = links[linkidx].get(coords, coordpos);
+				auto nmat = links[linkidx]->get(coords, coordpos);
 
 				curtrans = nmat * curtrans;
 				coordpos -= count_of_coords;
@@ -195,6 +236,78 @@ namespace cynematic
 
 			return speed_trans(((onedof_link<T>*)links[linkidx])->d1_bivec(), curtrans);
 		}
+
+		bivec<T, 3> get_sens_base(int idx, const std::vector<T>& coords)
+		{
+			uint8_t coordpos = coords_total - 1;
+			mtrans<T> curtrans {};
+
+			int linkidx = links.size() - 1;
+
+			while (coordpos != idx)
+			{
+				uint8_t count_of_coords = links[linkidx]->count_of_coords();
+				auto nmat = links[linkidx]->get(coords, coordpos);
+				curtrans = nmat * curtrans;
+				coordpos -= count_of_coords;
+				linkidx--;
+			}
+
+			auto bi = ((onedof_link<T>*)links[linkidx])->d1_bivec();
+			auto w = bi.a;
+			auto v = cross(w, curtrans.center) + bi.b;
+
+			mtrans<T> basetrans {};
+
+			while (linkidx >= 0)
+			{
+				uint8_t count_of_coords = links[linkidx]->count_of_coords();
+				auto nmat = links[linkidx]->get(coords, coordpos);
+				basetrans = nmat * basetrans;
+				coordpos -= count_of_coords;
+				linkidx--;
+			}
+
+			return { basetrans.rotate(w), basetrans.rotate(v) };
+		}
+
+
+		std::vector<T> solve_inverse_cynematic(const mtrans<T>& target, const std::vector<T>& _reference)
+		{
+			assert(_reference.size() == coords_total);
+			std::vector<T> reference = _reference;
+
+			mtrans<T> itr;
+			T lastlen = std::numeric_limits<T>::max();
+
+			while (1)
+			{
+				auto curtrans = get(reference);
+				auto rrr = get_speed_transes(reference);
+
+				auto koeffs = backpack(curtrans.vector6_to(target), rrr);
+
+				//PRINT(curtrans.vector6_to(target));
+				//PRINT(rrr);
+				//PRINT(koeffs);
+
+				for (int i = 0; i < coords_total; ++i) {
+					reference[i] += 0.1 * koeffs[i];
+				}
+
+				T summ = 0;
+				for (auto f : koeffs) summ += f*f;
+				summ /= koeffs.size(); 
+
+				if (summ < 0.000000000001) break;
+			}
+
+			return reference;
+		}
+
+
+
+
 
 		/*std::vector<mtrans<T>> sensivity_matrices(const std::vector<double>& coords)
 		{
@@ -250,14 +363,14 @@ namespace cynematic
 		std::vector<abstract_link<T> *> links;
 		size_t coords_total = 0;
 	};
-/*
-	struct dynamic_chain : public chain
-	{
-		~dynamic_chain()
+	/*
+		struct dynamic_chain : public chain
 		{
-			for (int i = 0; i < links.size(); ++i) delete links[i];
-		}
-	};*/
+			~dynamic_chain()
+			{
+				for (int i = 0; i < links.size(); ++i) delete links[i];
+			}
+		};*/
 }
 
 #endif

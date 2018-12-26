@@ -4,7 +4,7 @@
 #include <linalg.h>
 #include <linalg-ext.h>
 
-namespace cynematic 
+namespace linalg
 {
 	using namespace linalg;
 	using namespace linalg::aliases;
@@ -53,31 +53,35 @@ namespace cynematic
 			return mtrans(orient * oth.orient, qrot(orient, oth.center) + center);
 		}
 
-		mat<T, 4, 4> matrix()
+		mat<T, 4, 4> matrix() const
 		{
 			auto rmat = qmat(orient);
 			return {{qxdir(orient), 0}, {qydir(orient), 0}, {qzdir(orient), 0}, {center, 1}};
 		}
 
-		vec<T, 6> vector6()
+		vec<T, 6> vector6() const
 		{
 			auto angle = qangle(orient);
-			auto rotvec = angle == 0 ? vec<float,3>{0,0,0} : qaxis(orient) * angle;
+			auto rotvec = angle == 0 ? vec<T,3>{0,0,0} : qaxis(orient) * angle;
 			return { rotvec[0], rotvec[1], rotvec[2], center[0], center[1], center[2] };
 		}
 
 		static mtrans rotation(uvec<T, 3> axis, T angle) { return mtrans(rotation_quat(axis, angle), vec<T, 3>()); }
 		static mtrans translation(vec<T, 3> axis) { return mtrans(quat<T>(identity), axis); }
 
-		vec<T, 3> rotate (const vec<T, 3>& v) { return qrot(orient, v); }
-		vec<T, 3> transform (const vec<T, 3>& v) { return qrot(orient, v) + center; }
+		vec<T, 3> rotate (const vec<T, 3>& v) const { return qrot(orient, v); }
+		vec<T, 3> transform (const vec<T, 3>& v) const { return qrot(orient, v) + center; }
 
-		auto vector6_to(const mtrans& target) {
+		auto vector6_to(const mtrans& target) const {
 			return (target * inverse()).vector6();
 		} 
 
 		mtrans inverse() const { auto q = conjugate(orient); return { q, qrot(q, -center) }; }
 	};
+
+	template <typename T> mtrans<T> identity_lerp(const mtrans<T>& tr, T mul) { return { rotation_quat(qaxis(tr.orient), mul * qangle(tr.orient)), mul * tr.center }; }
+
+	template <typename T> mtrans<T> lerp(const mtrans<T>& atr, const mtrans<T>& btr, T mul) { return atr * identity_lerp(atr.inverse() * btr, mul);  }
 
 	/*struct mtrans
 	{
@@ -101,7 +105,7 @@ namespace cynematic
 		/*vec<T, 6> vector6()
 		{
 			auto angle = qangle(orient);
-			auto rotvec = angle == 0 ? vec<float,3>{0,0,0} : qaxis(orient) * angle;
+			auto rotvec = angle == 0 ? vec<T,3>{0,0,0} : qaxis(orient) * angle;
 			return { rotvec[0], rotvec[1], rotvec[2], center[0], center[1], center[2] };
 		}*/
 
@@ -127,6 +131,12 @@ namespace cynematic
 
 		return { res_w, res_v };
 	}
+
+	namespace ostream_overloads
+    {
+    	template<class C, class T> std::basic_ostream<C> & operator << (std::basic_ostream<C> & out, const mtrans<T> & tr) { return out << '{' << tr.orient << ',' << tr.center << '}'; }
+    	template<class C, class T> std::basic_ostream<C> & operator << (std::basic_ostream<C> & out, const bivec<T,3> & tr) { return out << '{' << tr.a << ',' << tr.b << '}'; }
+    }
 }
 
 #endif
