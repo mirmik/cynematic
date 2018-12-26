@@ -292,11 +292,11 @@ namespace cynematic
 				//PRINT(koeffs);
 
 				T koeffs_length = 0;
-				for (auto f : koeffs_length) koeffs_length += f*f;
-				koeffs_length /= koeffs_length.size(); 
+				for (auto f : koeffs) koeffs_length += f*f;
+				koeffs_length /= koeffs.size(); 
 
 				for (int i = 0; i < coords_total; ++i) {
-					reference[i] += koeffs[i] * koeffs_length > 1 ? 1 : koeffs_length;
+					reference[i] += koeffs[i] * (koeffs_length > 1 ? 1 / koeffs_length : 1);
 				}
 
 				if (koeffs_length < 0.000000000001) break;
