@@ -61,7 +61,7 @@ int main ()
 
 	cynematic::chain<float> chain { &c0, &r0, &t0, &t1 };
 
-	auto res = chain.get_speed_transes({deg(45),10,10});
+	/*auto res = chain.get_speed_transes({deg(45),10,10});
 	std::vector<float3> sens;
 	std::vector<vec<float,6>> sens6;
 

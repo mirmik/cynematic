@@ -7,13 +7,15 @@ licant.execute("../../cynematic.g.py")
 
 licant.libs.include("linalg-v3")
 licant.libs.include("nos")
+licant.libs.include("gxx")
 
 licant.cxx_application("target",
 	sources=["main.cpp"],
 	mdepends=[
 		"cynematic",
 		"linalg-v3", 
-		"nos"
+		"nos",
+		"gxx"
 	],	
 )
 

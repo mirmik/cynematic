@@ -6,6 +6,7 @@
 #include <cynematic/linalg-addon.h>
 
 #include <nos/trace.h>
+#include <gxx/panic.h>
 
 #include <initializer_list>
 #include <algorithm>
@@ -161,7 +162,7 @@ namespace cynematic
 					}
 					else
 					{
-						NOT_IMPLEMENTED();
+						PANIC_TRACED();
 					}
 				}
 
@@ -174,6 +175,25 @@ namespace cynematic
 
 			std::reverse(result.begin(),result.end());
 			return result;
+		}
+
+		bivec<T,3> get_sens(int idx, const std::vector<T>& coords) 
+		{
+			uint8_t coordpos = coords_total - 1;
+			mtrans<T> curtrans {};
+
+			int linkidx = links.size() - 1;
+			while (coordpos != idx) 
+			{
+				uint8_t count_of_coords = links[linkidx]->count_of_coords();
+				auto nmat = links[linkidx].get(coords, coordpos);
+
+				curtrans = nmat * curtrans;
+				coordpos -= count_of_coords;
+				linkidx--;
+			}
+
+			return speed_trans(((onedof_link<T>*)links[linkidx])->d1_bivec(), curtrans);
 		}
 
 		/*std::vector<mtrans<T>> sensivity_matrices(const std::vector<double>& coords)
