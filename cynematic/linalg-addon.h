@@ -32,41 +32,51 @@ namespace cynematic
 		}
 	};
 
+	template<typename T, int M>
+	struct uvec : public vec<T,M> {
+		uvec(const vec<T,M>& v) : vec<T,M>(normalize(v)) {}
+		uvec(const uvec<T,M>& u) : vec<T,M>(u) {}
+	};
+
 	template<typename T>
 	struct mtrans
 	{
-		quat<T> 	rot;
-		vec<T, 3> 	mov;
+		quat<T> 	orient;
+		vec<T, 3> 	center;
 
-		mtrans() : rot{0,0,0,1}, mov{0,0,0} {}
-		mtrans(const quat<T>& r, const vec<T, 3> m) : rot(r), mov(m) {}
-		mtrans(const mat<T,3,3>& r, const vec<T, 3> m) : rot(rotation_quat(r)), mov(m) {}
+		mtrans() : orient{0,0,0,1}, center{0,0,0} {}
+		mtrans(const quat<T>& r, const vec<T, 3> m) : orient(r), center(m) {}
+		mtrans(const mat<T,3,3>& r, const vec<T, 3> m) : orient(rotation_quat(r)), center(m) {}
 
-		mtrans operator*(const mtrans& oth)
+		mtrans operator*(const mtrans& oth) const
 		{
-			return mtrans(rot * oth.rot, qrot(rot, oth.mov) + mov);
+			return mtrans(orient * oth.orient, qrot(orient, oth.center) + center);
 		}
 
 		mat<T, 4, 4> matrix()
 		{
-			auto rmat = qmat(rot);
-			return {{qxdir(rot), 0}, {qydir(rot), 0}, {qzdir(rot), 0}, {mov, 1}};
+			auto rmat = qmat(orient);
+			return {{qxdir(orient), 0}, {qydir(orient), 0}, {qzdir(orient), 0}, {center, 1}};
 		}
 
 		vec<T, 6> vector6()
 		{
-			auto angle = qangle(rot);
-			auto rotvec = angle == 0 ? vec<float,3>{0,0,0} : qaxis(rot) * angle;
-			return { rotvec[0], rotvec[1], rotvec[2], mov[0], mov[1], mov[2] };
+			auto angle = qangle(orient);
+			auto rotvec = angle == 0 ? vec<float,3>{0,0,0} : qaxis(orient) * angle;
+			return { rotvec[0], rotvec[1], rotvec[2], center[0], center[1], center[2] };
 		}
 
-		static mtrans rotation(vec<T, 3> axis, T angle) { return mtrans(rotation_quat(axis, angle), vec<T, 3>()); }
+		static mtrans rotation(uvec<T, 3> axis, T angle) { return mtrans(rotation_quat(axis, angle), vec<T, 3>()); }
 		static mtrans translation(vec<T, 3> axis) { return mtrans(quat<T>(identity), axis); }
 
-		vec<T, 3> rotate (const vec<T, 3>& v) { return qrot(rot, v); }
-		vec<T, 3> transform (const vec<T, 3>& v) { return qrot(rot, v) + mov; }
+		vec<T, 3> rotate (const vec<T, 3>& v) { return qrot(orient, v); }
+		vec<T, 3> transform (const vec<T, 3>& v) { return qrot(orient, v) + center; }
 
-		mtrans inverse() const { auto q = conjugate(rot); return { q, qrot(q, -mov) }; }
+		auto vector6_to(const mtrans& target) {
+			return (target * inverse()).vector6();
+		} 
+
+		mtrans inverse() const { auto q = conjugate(orient); return { q, qrot(q, -center) }; }
 	};
 
 	/*struct mtrans
@@ -90,18 +100,18 @@ namespace cynematic
 
 		/*vec<T, 6> vector6()
 		{
-			auto angle = qangle(rot);
-			auto rotvec = angle == 0 ? vec<float,3>{0,0,0} : qaxis(rot) * angle;
-			return { rotvec[0], rotvec[1], rotvec[2], mov[0], mov[1], mov[2] };
+			auto angle = qangle(orient);
+			auto rotvec = angle == 0 ? vec<float,3>{0,0,0} : qaxis(orient) * angle;
+			return { rotvec[0], rotvec[1], rotvec[2], center[0], center[1], center[2] };
 		}*/
 
 	/*	static mtrans rotation(vec<T, 3> axis, T angle) { return mtrans(rotation_quat(axis, angle), vec<T, 3>()); }
 		static mtrans translation(vec<T, 3> axis) { return mtrans(quat<T>(identity), axis); }
 
-		vec<T, 3> rotate (const vec<T, 3>& v) { return qrot(rot, v); }
-		vec<T, 3> transform (const vec<T, 3>& v) { return qrot(rot, v) + mov; }
+		vec<T, 3> rotate (const vec<T, 3>& v) { return qrot(orient, v); }
+		vec<T, 3> transform (const vec<T, 3>& v) { return qrot(orient, v) + center; }
 
-		mtrans inverse() const { auto q = conjugate(rot); return { q, qrot(q, -mov) }; }
+		mtrans inverse() const { auto q = conjugate(orient); return { q, qrot(q, -center) }; }
 	};*/
 
 	template<class T>
@@ -113,7 +123,7 @@ namespace cynematic
 		auto trmat = link.inverse();
 
 		auto res_w = trmat.rotate(w);
-		auto res_v = trmat.rotate(cross(w, link.mov) + v);
+		auto res_v = trmat.rotate(cross(w, link.center) + v);
 
 		return { res_w, res_v };
 	}

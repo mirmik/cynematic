@@ -14,11 +14,6 @@ using namespace linalg::ostream_overloads;
 
 using namespace cynematic;
 
-float deg(float angle)
-{
-	return angle * M_PI / 180.0;
-}
-
 template<typename T, int M>
 std::vector<T> backpack(vec<T,M> need, std::vector<vec<T,M>> sens) 
 {
@@ -60,6 +55,18 @@ int main ()
 	cynematic::translation_link<float> t1(float3(0,0,1));
 
 	cynematic::chain<float> chain { &c0, &r0, &t0, &t1 };
+
+	auto rot0 = cynematic::mtrans<float>::rotation(float3(0,1,1), deg(90));
+	auto rot1 = cynematic::mtrans<float>::rotation(float3(0,0,1), deg(90));
+	auto rot2 = cynematic::mtrans<float>::rotation(float3(0,0,1), 0);
+
+	nos::println(rot0.orient);
+	nos::println(rot1.orient);
+	nos::println(rot2.orient);
+
+	nos::println(rot2.vector6_to(rot1));
+	nos::println(rot2.vector6_to(rot0));
+
 
 	/*auto res = chain.get_speed_transes({deg(45),10,10});
 	std::vector<float3> sens;
