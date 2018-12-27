@@ -272,7 +272,7 @@ namespace cynematic
 		}
 
 
-		std::vector<T> solve_inverse_cynematic(const mtrans<T>& target, const std::vector<T>& _reference)
+		std::vector<T> solve_inverse_cynematic(const mtrans<T>& target, const std::vector<T>& _reference, double maxstep)
 		{
 			assert(_reference.size() == coords_total);
 			std::vector<T> reference = _reference;
@@ -287,16 +287,15 @@ namespace cynematic
 
 				auto koeffs = backpack(curtrans.vector6_to(target), rrr);
 
-				//PRINT(curtrans.vector6_to(target));
-				//PRINT(rrr);
-				//PRINT(koeffs);
+//				PRINT(koeffs);
+//				PRINT(reference);
 
 				T koeffs_length = 0;
 				for (auto f : koeffs) koeffs_length += f*f;
-				koeffs_length /= koeffs.size(); 
+				koeffs_length /= (T)koeffs.size(); 
 
 				for (int i = 0; i < coords_total; ++i) {
-					reference[i] += koeffs[i] * (koeffs_length > 1 ? 1 / koeffs_length : 1);
+					reference[i] += koeffs[i] * (koeffs_length > maxstep ? (maxstep / koeffs_length) : 1);
 				}
 
 				if (koeffs_length < 0.000000000001) break;

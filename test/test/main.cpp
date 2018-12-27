@@ -47,7 +47,8 @@ int main ()
 
 		ctimer.start();
 		auto next_target = lerp(chain.get({0,0,0,0}), target, double(0.1 + 0.1 * i));
-		res = chain.solve_inverse_cynematic(next_target, {0,0,0,0}); 
+		//res = chain.solve_inverse_cynematic(next_target, {0,0,0,0}, 1); 
+		res = chain.solve_inverse_cynematic(next_target, res, 1); 
 		ctimer.stop();
 		PRINT(ctimer.micros());
 
