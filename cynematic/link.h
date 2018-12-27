@@ -3,7 +3,7 @@
 
 #include <linalg.h>
 #include <linalg-ext.h>
-#include <cynematic/linalg-addon.h>
+#include <linalg-add.h>
 
 #include <nos/trace.h>
 #include <gxx/panic.h>
@@ -18,6 +18,13 @@
 
 #include <numeric>
 
+#include <nos/input.h>
+
+#include <linalg/malgo.h>
+
+#define EPSILON 	0.000001
+#define EPSILON2 	0.0000001
+
 namespace cynematic
 {
 	using namespace linalg;
@@ -25,33 +32,64 @@ namespace cynematic
 	using namespace linalg::ostream_overloads;
 
 
-
+	///Функция выбирает коэфициенты линейной комбинации sens таким образом, чтобы образовать вектор need.
 	template<typename T, int M>
-	std::vector<T> backpack(vec<T, M> need, std::vector<vec<T, M>> sens)
+	dynvec<T> backpack(vec<T, M> need, std::vector<vec<T, M>> sens)
 	{
-		vec<T, M> last_res;
-		auto res = vec<T, M> {0, 0, 0};
-		auto koeffs = std::vector<T>();
-		koeffs.resize(sens.size());
+		T last_errlen;
+		vec<T, M> curvec;
+		dynvec<T> koeffs(sens.size());
+		dynvec<T> sens_length2(sens.size());
 
-		//nos::println();
+		for (int i = 0; i < sens.size(); ++i) 
+		{
+			sens_length2[i] = length2(sens[i]);
+		}
 
-		do
+		auto error = need - curvec;
+		auto errlen = pseudolen1(error);
+
+		do {
+			//В цикле покоординатно корректируем вектор. 
 			for (int i = 0; i < sens.size(); ++i)
 			{
-				last_res = res;
+				//Запоминаем то, что получили на последней итерации.
+				last_errlen = errlen;
 
-				koeffs[i] += linalg::dot(need - res, sens[i]) / length2(sens[i]);
+				//Проецируем sens на недостающий кусок вектора. Делим на квадрат sens.
+				//Первое деление даёт норму.
+				//Таким образом мы получаем длину проекции на sens.
+				//Второе деление учитывает масштаб. В конечном итоге получается минимизация расстояния need - curvec. 
+				auto koeffadd = linalg::dot(error, sens[i]) / sens_length2[i];
+				koeffs[i] += koeffadd;
 
-				res = vec<T, M> {0, 0, 0};
+				//Вычисляем новый curvec
+				curvec += sens[i] * koeffadd;
+				//curvec = vec<T, M> {};
+				//for (int j = 0; j < sens.size(); ++j)
+				//{
+				//	curvec += sens[j] * koeffs[j];
+				//}
 
-				for (int j = 0; j < sens.size(); ++j)
-				{
-					res += sens[j] * koeffs[j];
-				}
+				error = need - curvec;
+				errlen = pseudolen1(error);
+
+				/*nos::println();
+				PRINT(i);
+				PRINT(koeffadd);
+				PRINT(koeffs);
+				PRINT(need);
+				PRINT(sens);
+				PRINT(curvec);
+				PRINT(error);
+				PRINT(errlen);*/
+
+				//Условие выхода - минимизация длины ошибки.
+				if (errlen == 0) break;
 			}
-
-		while (length(res - last_res) > 0.000001);
+		} 
+		//Если результат не может быть достигнут, покидаем алгоритм по этому условию.
+		while (abs(errlen - last_errlen) > 0.0000000001);
 
 		return koeffs;
 	}
@@ -61,7 +99,7 @@ namespace cynematic
 	{
 		using ax_t = linalg::vec<T, 3>;
 
-		virtual mtrans<T> get(const std::vector<T>& coords,
+		virtual mtrans<T> get(const dynvec<T>& coords,
 		                      uint8_t pos) = 0;
 
 		virtual uint8_t count_of_coords() = 0;
@@ -72,7 +110,7 @@ namespace cynematic
 	{
 		virtual mtrans<T> get(T coord) = 0;
 
-		mtrans<T> get(const std::vector<T>& coords, uint8_t pos) override
+		mtrans<T> get(const dynvec<T>& coords, uint8_t pos) override
 		{
 			return get(coords[pos]);
 		}
@@ -90,7 +128,7 @@ namespace cynematic
 			return mat;
 		}
 
-		mtrans<T> get(const std::vector<T>& coords, uint8_t pos) override
+		mtrans<T> get(const dynvec<T>& coords, uint8_t pos) override
 		{
 			return mat;
 		}
@@ -159,7 +197,7 @@ namespace cynematic
 
 		void add_link(abstract_link<T>* lnk) { links.push_back(lnk); coords_total += lnk->count_of_coords(); }
 
-		mtrans<T> get(const std::vector<T>& coords)
+		mtrans<T> get(const dynvec<T>& coords)
 		{
 			mtrans<T> result {};
 			int8_t coord_pos = coords.size() - 1;
@@ -179,9 +217,9 @@ namespace cynematic
 			return result;
 		}
 
-		std::vector<vec<T,6>> get_speed_transes(const std::vector<T>& coords)
+		std::vector<vec<T, 6>> get_speed_transes(const dynvec<T>& coords)
 		{
-			std::vector<vec<T,6>> result;
+			std::vector<vec<T, 6>> result;
 
 			mtrans<T> curtrans {};
 			int8_t coord_pos = coords.size() - 1;
@@ -192,7 +230,7 @@ namespace cynematic
 
 				//Проверка корректности вектора координат.
 				if (coord_pos - count_of_coords + 1 < 0)
-					return std::vector<vec<T,6>>();
+					return std::vector<vec<T, 6>>();
 
 				if (count_of_coords > 0)
 				{
@@ -217,7 +255,7 @@ namespace cynematic
 			return result;
 		}
 
-		bivec<T, 3> get_sens(int idx, const std::vector<T>& coords)
+		bivec<T, 3> get_sens(int idx, const dynvec<T>& coords)
 		{
 			uint8_t coordpos = coords_total - 1;
 			mtrans<T> curtrans {};
@@ -237,7 +275,7 @@ namespace cynematic
 			return speed_trans(((onedof_link<T>*)links[linkidx])->d1_bivec(), curtrans);
 		}
 
-		bivec<T, 3> get_sens_base(int idx, const std::vector<T>& coords)
+		bivec<T, 3> get_sens_base(int idx, const dynvec<T>& coords)
 		{
 			uint8_t coordpos = coords_total - 1;
 			mtrans<T> curtrans {};
@@ -272,10 +310,11 @@ namespace cynematic
 		}
 
 
-		std::vector<T> solve_inverse_cynematic(const mtrans<T>& target, const std::vector<T>& _reference, double maxstep)
+		dynvec<T> solve_inverse_cynematic(const mtrans<T>& target, const dynvec<T>& _reference, 
+			T maxstep = 1)
 		{
 			assert(_reference.size() == coords_total);
-			std::vector<T> reference = _reference;
+			dynvec<T> reference = _reference;
 
 			mtrans<T> itr;
 			T lastlen = std::numeric_limits<T>::max();
@@ -284,21 +323,38 @@ namespace cynematic
 			{
 				auto curtrans = get(reference);
 				auto rrr = get_speed_transes(reference);
+				auto iv6 = curtrans.vector6_to(target);
 
-				auto koeffs = backpack(curtrans.vector6_to(target), rrr);
+				if (pseudolen1(iv6) < 0.0000001) { 
+					nos::println("RESULT:", reference);
+					break; 
+				}
+				auto koeffs = backpack(iv6, rrr);
 
-//				PRINT(koeffs);
-//				PRINT(reference);
 
-				T koeffs_length = 0;
-				for (auto f : koeffs) koeffs_length += f*f;
-				koeffs_length /= (T)koeffs.size(); 
+				T koeffs_length = length(koeffs);
+				//for (auto f : koeffs) koeffs_length += f * f;
+				//koeffs_length = sqrt(koeffs_length);///= (T)koeffs.size();
+				//for (auto f : koeffs) koeffs_length += abs(f);
+				//koeffs_length /= koeffs.size();
 
-				for (int i = 0; i < coords_total; ++i) {
+
+				/*nos::println();
+				PRINT(target);
+				PRINT(curtrans);
+				PRINT(curtrans.inverse() * target);
+				PRINT(iv6);
+				PRINT(rrr);
+				PRINT(koeffs);
+				PRINT(koeffs_length);
+				PRINT(reference);
+
+				nos::readline();*/
+
+				for (int i = 0; i < coords_total; ++i)
+				{
 					reference[i] += koeffs[i] * (koeffs_length > maxstep ? (maxstep / koeffs_length) : 1);
 				}
-
-				if (koeffs_length < 0.000000000001) break;
 			}
 
 			return reference;
@@ -308,7 +364,7 @@ namespace cynematic
 
 
 
-		/*std::vector<mtrans<T>> sensivity_matrices(const std::vector<double>& coords)
+		/*std::vector<mtrans<T>> sensivity_matrices(const std::vector<T>& coords)
 		{
 			TRACE();
 			std::vector<mtrans<T>> result;
@@ -345,7 +401,7 @@ namespace cynematic
 
 		}
 
-		std::vector<double> sensivity(std::vector<double> curcoords, mtrans<T> target)
+		std::vector<T> sensivity(std::vector<T> curcoords, mtrans<T> target)
 		{
 			auto curmat = get(curcoords);
 			auto needmat = target * inverse(curmat);

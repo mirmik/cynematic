@@ -6,9 +6,9 @@
 #include <vector>
 
 #include <cynematic/link.h>
-#include <cynematic/linalg-addon.h>
-
 #include <gxx/time/chronotimer.h>
+
+#include <linalg/malgo.h>
 
 using namespace linalg;
 using namespace linalg::aliases;
@@ -27,11 +27,11 @@ int main ()
 
 	cynematic::chain<double> chain { &c0, &r0, &t0, &t1, &r2 };
 	
-	auto target = mtrans<double>::rotation(double3(0,0,1), deg(45)) * mtrans<double>::translation(double3(0,10,10));
+	auto target = mtrans<double>::rotation(double3(0,0,1), deg(45)) * mtrans<double>::translation(double3(0,1,1));
 
 	//nos::println(target);
 
-	std::vector<double> res = {0,0,0,0};
+	dynvec<double> res = {0,0,0,0};
 
 	PRINT(chain.get({0,0,0,0}));
 	PRINT(chain.get({1,0,0,0}));
@@ -42,19 +42,18 @@ int main ()
 
 
 	gxx::chronotimer ctimer;
-	for (int i = 0; i < 11; ++i) {
-		nos::println("HEREE!!!");
-
+	for (int i = 0; i < 101; ++i) {
 		ctimer.start();
-		auto next_target = lerp(chain.get({0,0,0,0}), target, double(0.1 + 0.1 * i));
+		auto next_target = lerp(chain.get({0,0.1,0,0}), target, double(0.01 * i));
 		//res = chain.solve_inverse_cynematic(next_target, {0,0,0,0}, 1); 
 		res = chain.solve_inverse_cynematic(next_target, res, 1); 
 		ctimer.stop();
 		PRINT(ctimer.micros());
 
-		PRINT(next_target);
+		/*PRINT(next_target);
 		PRINT(res);
 		PRINT(chain.get(res));
+		nos::println();*/
 	}
 
 
