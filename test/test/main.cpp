@@ -8,6 +8,8 @@
 #include <cynematic/link.h>
 #include <cynematic/linalg-addon.h>
 
+#include <gxx/time/chronotimer.h>
+
 using namespace linalg;
 using namespace linalg::aliases;
 using namespace linalg::ostream_overloads;
@@ -39,10 +41,15 @@ int main ()
 	PRINT(chain.get({1,1,1,1}));
 
 
+	gxx::chronotimer ctimer;
 	for (int i = 0; i < 11; ++i) {
 		nos::println("HEREE!!!");
+
+		ctimer.start();
 		auto next_target = lerp(chain.get({0,0,0,0}), target, double(0.1 + 0.1 * i));
 		res = chain.solve_inverse_cynematic(next_target, {0,0,0,0}); 
+		ctimer.stop();
+		PRINT(ctimer.micros());
 
 		PRINT(next_target);
 		PRINT(res);
