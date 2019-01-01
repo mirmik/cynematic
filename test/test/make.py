@@ -8,6 +8,7 @@ licant.execute("../../cynematic.g.py")
 licant.libs.include("linalg-v3")
 licant.libs.include("nos")
 licant.libs.include("gxx")
+licant.libs.include("malgo")
 
 licant.cxx_application("target",
 	sources=["main.cpp"],
@@ -15,7 +16,9 @@ licant.cxx_application("target",
 		"cynematic",
 		"linalg-v3", 
 		"nos",
-		"gxx"
+		"malgo",
+		"gxx",
+		("gxx.dprint", "__none__")
 	],	
 )
 

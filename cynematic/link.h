@@ -20,7 +20,9 @@
 
 #include <nos/input.h>
 
-#include <linalg/malgo.h>
+#include <malgo/vector.h>
+#include <malgo/matrix.h>
+#include <malgo/nrecipes/svd.h>
 
 #define EPSILON 	0.000001
 #define EPSILON2 	0.0000001
@@ -31,15 +33,46 @@ namespace cynematic
 	using namespace linalg::aliases;
 	using namespace linalg::ostream_overloads;
 
+	template<typename T, int M>
+	malgo::vector<T> backpack(vec<T, M> need, std::vector<vec<T, M>> sens) 
+	{
+		malgo::matrix<T> m(sens);
+		m = transpose(m);
+		malgo::vecview<T> b(&need[0], 6);
+		malgo::vector<T> x(sens.size());
+		malgo::SVD<malgo::matrix<T>> svd(m);
+
+		//PRINT(m);
+		//PRINT(svd.u);
+		//PRINT(svd.v);
+		//PRINT(svd.w);
+
+		try {
+		svd.solve(b, x);
+		}
+		catch (const char * c) {
+		//	PRINT(b.size());
+		//	PRINT(x.size());
+		//	PRINT(m.size1());
+		//	PRINT(m.size2());
+		//	PRINT(c);
+		//	exit(0);
+		}
+		//PRINT(b);
+		//PRINT(x);
+
+		return x;
+	}
+	
 
 	///Функция выбирает коэфициенты линейной комбинации sens таким образом, чтобы образовать вектор need.
-	template<typename T, int M>
-	dynvec<T> backpack(vec<T, M> need, std::vector<vec<T, M>> sens)
+/*	template<typename T, int M>
+	malgo::vector<T> backpack(vec<T, M> need, std::vector<vec<T, M>> sens)
 	{
 		T last_errlen;
 		vec<T, M> curvec;
-		dynvec<T> koeffs(sens.size());
-		dynvec<T> sens_length2(sens.size());
+		malgo::vector<T> koeffs(sens.size());
+		malgo::vector<T> sens_length2(sens.size());
 
 		for (int i = 0; i < sens.size(); ++i) 
 		{
@@ -85,21 +118,21 @@ namespace cynematic
 				PRINT(errlen);*/
 
 				//Условие выхода - минимизация длины ошибки.
-				if (errlen == 0) break;
+/*				if (errlen == 0) break;
 			}
 		} 
 		//Если результат не может быть достигнут, покидаем алгоритм по этому условию.
 		while (abs(errlen - last_errlen) > 0.0000000001);
 
 		return koeffs;
-	}
+	}*/
 
 	template <typename T>
 	struct abstract_link
 	{
 		using ax_t = linalg::vec<T, 3>;
 
-		virtual mtrans<T> get(const dynvec<T>& coords,
+		virtual mtrans<T> get(const malgo::vector<T>& coords,
 		                      uint8_t pos) = 0;
 
 		virtual uint8_t count_of_coords() = 0;
@@ -110,7 +143,7 @@ namespace cynematic
 	{
 		virtual mtrans<T> get(T coord) = 0;
 
-		mtrans<T> get(const dynvec<T>& coords, uint8_t pos) override
+		mtrans<T> get(const malgo::vector<T>& coords, uint8_t pos) override
 		{
 			return get(coords[pos]);
 		}
@@ -128,7 +161,7 @@ namespace cynematic
 			return mat;
 		}
 
-		mtrans<T> get(const dynvec<T>& coords, uint8_t pos) override
+		mtrans<T> get(const malgo::vector<T>& coords, uint8_t pos) override
 		{
 			return mat;
 		}
@@ -197,7 +230,7 @@ namespace cynematic
 
 		void add_link(abstract_link<T>* lnk) { links.push_back(lnk); coords_total += lnk->count_of_coords(); }
 
-		mtrans<T> get(const dynvec<T>& coords)
+		mtrans<T> get(const malgo::vector<T>& coords)
 		{
 			mtrans<T> result {};
 			int8_t coord_pos = coords.size() - 1;
@@ -217,7 +250,7 @@ namespace cynematic
 			return result;
 		}
 
-		std::vector<vec<T, 6>> get_speed_transes(const dynvec<T>& coords)
+		std::vector<vec<T, 6>> get_speed_transes(const malgo::vector<T>& coords)
 		{
 			std::vector<vec<T, 6>> result;
 
@@ -255,7 +288,7 @@ namespace cynematic
 			return result;
 		}
 
-		bivec<T, 3> get_sens(int idx, const dynvec<T>& coords)
+		bivec<T, 3> get_sens(int idx, const malgo::vector<T>& coords)
 		{
 			uint8_t coordpos = coords_total - 1;
 			mtrans<T> curtrans {};
@@ -275,7 +308,7 @@ namespace cynematic
 			return speed_trans(((onedof_link<T>*)links[linkidx])->d1_bivec(), curtrans);
 		}
 
-		bivec<T, 3> get_sens_base(int idx, const dynvec<T>& coords)
+		bivec<T, 3> get_sens_base(int idx, const malgo::vector<T>& coords)
 		{
 			uint8_t coordpos = coords_total - 1;
 			mtrans<T> curtrans {};
@@ -310,11 +343,11 @@ namespace cynematic
 		}
 
 
-		dynvec<T> solve_inverse_cynematic(const mtrans<T>& target, const dynvec<T>& _reference, 
+		malgo::vector<T> solve_inverse_cynematic(const mtrans<T>& target, const malgo::vector<T>& _reference, 
 			T maxstep = 1)
 		{
 			assert(_reference.size() == coords_total);
-			dynvec<T> reference = _reference;
+			malgo::vector<T> reference = _reference;
 
 			mtrans<T> itr;
 			T lastlen = std::numeric_limits<T>::max();

@@ -8,7 +8,7 @@
 #include <cynematic/link.h>
 #include <gxx/time/chronotimer.h>
 
-#include <linalg/malgo.h>
+#include <malgo/matrix.h>
 
 using namespace linalg;
 using namespace linalg::aliases;
@@ -31,7 +31,7 @@ int main ()
 
 	//nos::println(target);
 
-	dynvec<double> res = {0,0,0,0};
+	malgo::vector<double> res = {0,0,0,0};
 
 	PRINT(chain.get({0,0,0,0}));
 	PRINT(chain.get({1,0,0,0}));
